@@ -1,17 +1,37 @@
+import CssMinimizerWebpackPlugin from "css-minimizer-webpack-plugin";
 import ESLintPlugin from "eslint-webpack-plugin";
+import ExtractCssChunks from "extract-css-chunks-webpack-plugin";
 import HtmlWebpackPlugin from "html-webpack-plugin";
 import path from "path";
 import type webpack from "webpack";
 import type { Configuration as WebpackDevServerConfiguration } from "webpack-dev-server";
+
+const devMode = process.env.NODE_ENV !== "production";
 
 const config: webpack.Configuration & { devServer?: WebpackDevServerConfiguration } = {
     entry: "./src/index.ts",
     output: {
         path: path.join(__dirname, "/dist"),
         filename: "[name].bundle.js",
-        assetModuleFilename: "assets/[name][ext]",
         clean: true
     },
+    optimization: {
+        minimize: devMode ? false : true,
+        minimizer: [
+            "...",
+            new CssMinimizerWebpackPlugin()
+        ],
+        splitChunks: {
+            cacheGroups: {
+                vendor: {
+                    test: /[\\/]node_modules[\\/]/,
+                    name: 'vendors',
+                    chunks: 'all'
+                }
+            },
+        }
+    },
+    cache: false,
     module: {
         rules: [
             {
@@ -20,7 +40,11 @@ const config: webpack.Configuration & { devServer?: WebpackDevServerConfiguratio
             },
             {
                 test: /\.(png|jpg|gif)$/,
-                type: "asset"
+                loader: "file-loader",
+                options: {
+                    name: "[name].[hash:8].[ext]",
+                    outputPath: "assets"
+                }
             },
             {
                 test: /\.html$/,
@@ -28,7 +52,26 @@ const config: webpack.Configuration & { devServer?: WebpackDevServerConfiguratio
             },
             {
                 test: /\.css$/,
-                type: "asset"
+                exclude: /\.module\.css$/,
+                use: [
+                    ExtractCssChunks.loader,
+                    "css-loader"
+                ]
+            },
+            {
+                test: /\.module\.css$/,
+                use: [
+                    ExtractCssChunks.loader,
+                    {
+                        loader: "css-loader",
+                        options: {
+                            modules: {
+                                localIdentName: "[name]__[local]--[hash:base64:5]",
+                                exportLocalsConvention: "camelCase"
+                            }
+                        }
+                    }
+                ]
             }
         ]
     },
@@ -38,14 +81,21 @@ const config: webpack.Configuration & { devServer?: WebpackDevServerConfiguratio
             "@": path.resolve(__dirname, "src")
         },
         modules: ["src", "node_modules"],
-        extensions: [".js", ".jsx", ".ts", ".tsx"]
+        extensions: [".js", ".jsx", ".ts", ".tsx"],
+        fallback: {
+            "url": require.resolve("url/")
+        }
     },
     plugins: [
         new HtmlWebpackPlugin({
             template: "./src/index.html"
         }),
+        new ExtractCssChunks({
+            filename: "[name].css",
+            chunkFilename: "[id].css"
+        }) as any,
         new ESLintPlugin({
-            extensions: ["ts"],
+            extensions: ["ts", "tsx"],
             fix: true,
             cache: true
         })
@@ -56,9 +106,11 @@ const config: webpack.Configuration & { devServer?: WebpackDevServerConfiguratio
         allowedHosts: "all",
         client: {
             logging: "none"
-        }
+        },
+        hot: true,
+        watchFiles: ["src/**/*"]
     },
-    mode: "development"
+    mode: devMode ? "development" : "production"
 };
 
 export default config;
